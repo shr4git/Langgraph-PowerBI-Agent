@@ -3,7 +3,16 @@
   "python_version": "3.11",
   "entrypoint": "app.agent:create_app",
   "graphs": { "default": "app.agent:create_app" },
-  "requirement_file": "requirements.txt",
+  "dependencies": [
+    "langgraph>=0.4.20",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-community>=0.3.0",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "tenacity>=8.2.3",
+    "langfuse>=3.0.0"
+  ],
   "env": [
     "OPENAI_API_KEY",
     "TENANT_ID",
@@ -15,6 +24,7 @@
     "LANGFUSE_SECRET_KEY"
   ]
 }
+
 
 
 
