@@ -1,23 +1,20 @@
 import os
 import json
 from typing import Literal
-
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode  # correct import
 from langchain_community.tools import tool
-
-# Keep your original Langfuse import/usage as-is
+# NEW: Langfuse client
 from langfuse import get_client
 
 load_dotenv()
 langfuse = get_client()  # reads LANGFUSE_HOST/PUBLIC/SECRET from env
 
-# Import our PBI functions (adjusted to package path)
-from app.tools_powerbi import list_reports, list_report_pages
-
+# Import our PBI functions
+from .tools_powerbi import list_reports, list_report_pages
 
 def _serialize_messages(msgs: list[BaseMessage]) -> list[dict]:
     """Compact, safe serialization for logging."""
@@ -27,60 +24,72 @@ def _serialize_messages(msgs: list[BaseMessage]) -> list[dict]:
         out.append({"role": role, "content": getattr(m, "content", "")})
     return out
 
+# Wrap functions as LangChain tools
+# Expose list_reports as a tool callable by the LLM.
+# The docstring is used by tool-selection prompting to describe capability.
+@tool("list_powerbi_reports")
+def _list_powerbi_reports() -> str:
+    """List Power BI reports in the configured workspace."""
+    return json.dumps(list_reports())
 
-# Wrap functions as LangChain tools (same behavior as your original)
-@tool
-def pbi_list_reports(workspace_id: str | None = None) -> str:
-    """List Power BI reports in the given workspace. If no workspace_id is provided, defaults to PBI_WORKSPACE_ID env var."""
-    data = list_reports(workspace_id=workspace_id)
-    return json.dumps(data)
+# Tool callable exposed as a callable by LLM to list the pages in a report
+@tool("get_powerbi_report_pages")
+def _get_powerbi_report_pages(report_id: str) -> str:
+    """List pages for a given Power BI report ID."""
+    return json.dumps(list_report_pages(report_id))
 
+# tools created thus far that agent uses
+TOOLS = [_list_powerbi_reports, _get_powerbi_report_pages]
 
-@tool
-def pbi_list_report_pages(report_id: str) -> str:
-    """List pages for a Power BI report by report_id."""
-    data = list_report_pages(report_id=report_id)
-    return json.dumps(data)
+# use gpt-40-mini
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools(TOOLS)
 
+def should_continue(state: MessagesState) -> Literal["tools", "__end__"]:
+    last = state["messages"][-1]
+    return "tools" if getattr(last, "tool_calls", None) else "__end__"
 
-def _build_app():
-    tools = [pbi_list_reports, pbi_list_report_pages]
+# ToolNode handles executing tools LLM selected
+tool_node = ToolNode(TOOLS)
 
-    # Preserve your OpenAI/Azure selection pattern if present; default to OpenAI
-    use_azure = os.environ.get("OPENAI_API_TYPE", "").lower() == "azure"
-    if use_azure:
-        llm = AzureChatOpenAI(
-            azure_deployment=os.environ.get("AZURE_OPENAI_DEPLOYMENT", ""),
-            api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01"),
-        ).bind_tools(tools)
-    else:
-        llm = ChatOpenAI(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini")).bind_tools(tools)
+def call_model(state: MessagesState):
+    messages = state["messages"]
+    # OPTIONAL: add one-time system nudge to stop after tool results
+    if messages and not any(isinstance(m, SystemMessage) for m in messages):
+        messages = [SystemMessage(content="After using tools, summarize and finish.")] + messages
 
-    def call_agent(state: MessagesState) -> MessagesState:
-        result = llm.invoke(state["messages"])
-        return {"messages": state["messages"] + [result]}
+    # NEW: log LLM input/output to Langfuse
+    with langfuse.start_as_current_span(name="agent.llm") as span:
+        span.update(input={"messages": _serialize_messages(messages)})
+        response = llm.invoke(messages)
+        span.update(output={
+            "content": response.content,
+            "tool_calls": getattr(response, "tool_calls", None),
+        })
+    return {"messages": [response]}
 
-    def should_continue(state: MessagesState) -> str:
-        last = state["messages"][-1]
-        has_calls = getattr(last, "tool_calls", None)
-        return "tools" if has_calls else "end"
+# simple two-node graph
+workflow = StateGraph(MessagesState)
+workflow.add_node("agent", call_model)
+workflow.add_node("tools", tool_node)
+workflow.add_edge("__start__", "agent")
+workflow.add_conditional_edges("agent", should_continue)
+workflow.add_edge("tools", "agent")
+app = workflow.compile()
 
-    graph = StateGraph(MessagesState)
-    graph.add_node("agent", call_agent)
-    graph.add_node("tools", ToolNode(tools=tools))
-    graph.add_edge("tools", "agent")
-    graph.set_entry_point("agent")
-    graph.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": "__end__"})
-    return graph.compile()
-
-
-# Factory for LangGraph Platform discovery (no behavior change)
+# factory for platform entrypoint
 def create_app():
-    return _build_app()
+    return app
 
-
+# main method that was there just for testing
+# kept just for testing sakes
+# recommend testinf instead using run_agent.py
 if __name__ == "__main__":
-    app = create_app()
-    out = app.invoke({"messages": [HumanMessage(content="List my Power BI reports.")]})
-    print(out)
+    user_prompt = "List my Power BI reports and their pages."
+    # NEW: root span so the whole run nests together
+    with langfuse.start_as_current_span(name="session.run") as root:
+        root.update(input={"prompt": user_prompt})
+        res = app.invoke({"messages": [HumanMessage(content=user_prompt)]})
+        final_text = res["messages"][-1].content
+        root.update(output={"final": final_text})
+        print(final_text)
 
