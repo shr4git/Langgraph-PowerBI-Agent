@@ -3,6 +3,9 @@
   "python_version": "3.11",
   "entrypoint": "app.agent:create_app",
   "dependencies": ["-r", "requirements.txt"],
+  "graphs": {
+    "default": "app.agent:create_app"
+  },
   "env": [
     "OPENAI_API_KEY",
     "TENANT_ID",
@@ -14,3 +17,4 @@
     "LANGFUSE_SECRET_KEY"
   ]
 }
+
