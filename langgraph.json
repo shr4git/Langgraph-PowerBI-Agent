@@ -3,7 +3,10 @@
   "python_version": "3.11",
   "entrypoint": "app.agent:create_app",
   "graphs": { "default": "app.agent:create_app" },
+<<<<<<< HEAD
   "packages": ["app"],
+=======
+>>>>>>> 3f5056c (new changes)
   "dependencies": [
     "langgraph>=0.4.20",
     "langchain-core>=0.3.0",
@@ -12,7 +15,12 @@
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
     "tenacity>=8.2.3",
+<<<<<<< HEAD
     "langfuse>=3.0.0"
+=======
+    "langfuse>=3.0.0",
+    "."
+>>>>>>> 3f5056c (new changes)
   ],
   "env": [
     "OPENAI_API_KEY",
@@ -25,3 +33,4 @@
     "LANGFUSE_SECRET_KEY"
   ]
 }
+
