@@ -1,0 +1,6 @@
+{
+  "language": "python",
+  "entrypoint": "app.agent:create_app",
+  "python_version": "3.11"
+}
+
