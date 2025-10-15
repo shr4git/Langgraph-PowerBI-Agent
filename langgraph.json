@@ -2,5 +2,27 @@
   "language": "python",
   "python_version": "3.11",
   "entrypoint": "app.agent:create_app",
-  "dependencies": ["-r", "requirements.txt"]
+  "graphs": { "default": "app.agent:create_app" },
+  "dependencies": [
+    "langgraph>=0.4.20",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-community>=0.3.0",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "tenacity>=8.2.3",
+    "langfuse>=3.0.0",
+    "."
+  ],
+  "env": [
+    "OPENAI_API_KEY",
+    "TENANT_ID",
+    "CLIENT_ID",
+    "CLIENT_SECRET",
+    "PBI_WORKSPACE_ID",
+    "LANGFUSE_HOST",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY"
+  ]
 }
+
