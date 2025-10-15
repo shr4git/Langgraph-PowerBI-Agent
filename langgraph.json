@@ -3,6 +3,7 @@
   "python_version": "3.11",
   "entrypoint": "app.agent:create_app",
   "graphs": { "default": "app.agent:create_app" },
+  "packages": ["app"],
   "dependencies": [
     "langgraph>=0.4.20",
     "langchain-core>=0.3.0",
@@ -24,7 +25,3 @@
     "LANGFUSE_SECRET_KEY"
   ]
 }
-
-
-
-
